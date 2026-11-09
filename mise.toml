@@ -1,0 +1,84 @@
+[tools]
+"aqua:temporalio/cli" = "1.10.0"
+python = "3.13"
+uv = "latest"
+
+[tasks.install]
+description = "Install dependencies (for tests and local development)"
+run = "uv sync"
+
+[tasks.test]
+run = "uv run pytest -q"
+
+[tasks.lint]
+run = ["uv run ruff check .", "uv run ruff format --check ."]
+
+# ── The room, in containers ───────────────────────────────────────────────
+# `up` starts everything: Temporal, the web page and a worker (compose.yaml). The gateway key is
+# read from fnox into the environment of `docker compose` and passed through; it is never written
+# to a file. The tasks below it run the room's CLI inside the web container, against the same state.
+
+[tasks.up]
+description = "Build and start the room: web http://127.0.0.1:8250, Temporal UI http://127.0.0.1:8243"
+run = '''
+key=$(ls "$HOME"/.config/nevia/keys/* 2>/dev/null | head -1)
+export NEVIA_KEY_PATH="${NEVIA_KEY_PATH:-$key}"
+[ -n "$NEVIA_KEY_PATH" ] || echo "No Nevia key file found: the room runs, but proof-of-concept builds will fail."
+fnox exec -- docker compose up -d --build --wait
+echo "Writers Room: http://127.0.0.1:8250   Temporal: http://127.0.0.1:8243"
+'''
+
+[tasks.down]
+description = "Stop the room (state stays in its volumes)"
+run = "docker compose down"
+
+[tasks.logs]
+description = "Follow the room's logs. SERVICE=web|worker|temporal (default: web and worker)"
+run = 'docker compose logs -f --tail=100 ${SERVICE:-web worker}'
+
+[tasks.ps]
+description = "What's running"
+run = "docker compose ps"
+
+[tasks.room]
+description = "Run any room command in the container, e.g. `mise run room -- show 3`"
+run = "docker compose exec web room"
+
+[tasks.scout]
+description = "Pull trending signals, let the scout pitch posts and the editor rank them. Pitches wait for approval."
+run = "docker compose exec web room scout"
+
+[tasks.pitch]
+description = "Pitch a post from your own prompt (pre-approved). PROMPT='...' [AUTHOR=slug] [POC=1]"
+run = 'docker compose exec web room pitch ${AUTHOR:+--author "$AUTHOR"} ${POC:+--poc} "$PROMPT"'
+
+[tasks.pitches]
+description = "List pitches and their status"
+run = "docker compose exec web room pitches"
+
+[tasks.approve]
+description = "Approve a scouted pitch. ID=<pitch id>"
+run = 'docker compose exec web room approve "$ID"'
+
+[tasks.write]
+description = "Take one approved pitch to a committed draft on a blog branch. ID=<pitch id>"
+run = 'docker compose exec web room write "$ID"'
+
+[tasks.spend]
+description = "Model spend so far, by pitch and role"
+run = "docker compose exec web room spend"
+
+# ── Without containers (development) ──────────────────────────────────────
+# The same room on this machine, with its state in .room/ (separate from the containers' volume).
+
+[tasks."dev:temporal"]
+description = "Temporal dev server on this machine. gRPC 127.0.0.1:7243, UI http://127.0.0.1:8243, state in .room/temporal.db"
+run = "mkdir -p .room && temporal server start-dev --ip 127.0.0.1 --port 7243 --ui-port 8243 --db-filename .room/temporal.db"
+
+[tasks."dev:web"]
+description = "The web page on this machine: http://127.0.0.1:8250"
+run = "fnox exec -- uv run room web"
+
+[tasks."dev:worker"]
+description = "A Temporal worker on this machine"
+run = "fnox exec -- uv run room worker"

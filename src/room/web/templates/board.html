@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import card %}
+{% block main %}
+<section class="intro">
+  <div>
+    <h1>What the room is working on</h1>
+    <p class="muted">Six writers, a researcher, a demo builder and a fact-checker. You approve the ideas and merge the drafts; they do the rest.{% if durable %} Writes are durable: if this page or your laptop stops, they pick up where they left off.{% endif %}</p>
+  </div>
+  <div class="intro-actions">
+    <form method="post" action="/scout">
+      <button class="button ghost" {% if scouting or not key_ok %}disabled{% endif %}>{% if scouting %}<span class="pulse"></span>Scouting…{% else %}Find ideas from this week{% endif %}</button>
+    </form>
+    <a class="button" href="/pitches/new">Pitch a post</a>
+  </div>
+</section>
+
+{% if scouting %}
+<details class="log-box" open><summary>The scout is reading this week's threads</summary><pre id="log" data-src="/scout/log" data-follow="1"></pre></details>
+{% endif %}
+
+<div class="board">
+  {% for col in columns %}
+  {% if col.pitches or col.title != 'Needs you' %}
+  <section class="column {% if col.title == 'Needs you' %}attention{% endif %}">
+    <header><h2>{{ col.title }}</h2><span class="count">{{ col.pitches | length }}</span></header>
+    <p class="muted small">{{ col.blurb }}</p>
+    {% for p in col.pitches %}{{ card(p, authors) }}{% else %}
+      <div class="empty">{% if col.title == 'Ideas' %}Nothing waiting. <a href="/pitches/new">Pitch one</a>, or let the scout look around.{% else %}Nothing here.{% endif %}</div>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {% endfor %}
+</div>
+
+{% if passed %}
+<details class="passed"><summary>Passed on ({{ passed | length }})</summary>
+  <ul>{% for p in passed %}<li><a href="/pitches/{{ p.id }}">{{ p.title }}</a> <span class="muted">· {{ p.reason | truncate(120) }}</span></li>{% endfor %}</ul>
+</details>
+{% endif %}
+<p class="footnote muted">${{ '%.2f' | format(total_usd) }} spent on models so far{% if not total_usd %} (prices in room.toml are still 0, so this counts tokens only){% endif %}.</p>
+{% endblock %}

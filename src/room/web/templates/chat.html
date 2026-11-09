@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Talking with {{ a.name }} · Writers Room{% endblock %}
+{% block main %}
+<div class="chat" data-chat="{{ chat.id }}" data-first="{{ a.name.split()[0] }}">
+  <header class="chat-head">
+    <span class="avatar large" style="--h: {{ chat.author | hue }}">{{ a.name | initials }}</span>
+    <div>
+      <h1>{{ a.name }}</h1>
+      <p class="muted small">{{ a.role }} · {{ a.voice }}</p>
+      {% if pitch %}<p class="small">About <a href="/pitches/{{ pitch.id }}">#{{ pitch.id }} {{ pitch.title }}</a></p>{% endif %}
+    </div>
+  </header>
+
+  <ol class="messages" id="messages">
+    {% if not msgs %}
+    <li class="msg writer intro-msg"><div class="bubble">
+      {% if pitch %}<p>Hi. I've got pitch #{{ pitch.id }} in front of me. Ask me what the room found, why the draft says what it says, or tell me what you'd change. Pin anything you want the room to follow.</p>
+      {% else %}<p>Hi, I'm {{ a.name.split()[0] }}. I write about {{ a.beat }}. Got something you've been wondering whether we should cover? Talk it through with me; if we land on a post, I'll put it on the board for you.</p>{% endif %}
+    </div></li>
+    {% endif %}
+    {% for m in msgs %}
+    <li class="msg {{ m.who }}{% if m.pinned %} pinned{% endif %}" data-id="{{ m.id }}">
+      <div class="bubble">{{ m.body | md | safe }}</div>
+      {% if m.who == 'you' and pitch %}<button class="pin" data-id="{{ m.id }}" title="Pinned messages become direction for this pitch's next write">{% if m.pinned %}Pinned as direction{% else %}Pin as direction{% endif %}</button>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+
+  <form class="composer" id="composer">
+    <textarea id="text" rows="2" placeholder="Message {{ a.name.split()[0] }}…" {% if not key_ok %}disabled{% endif %}></textarea>
+    <button class="button" {% if not key_ok %}disabled{% endif %}>Send</button>
+  </form>
+  <p class="muted small chat-foot">
+    {{ a.name.split()[0] }} can read the blog{% if pitch %} and this pitch's notes{% endif %}, look things up, and put a pitch on the board when you ask. They can't change drafts or approve anything.
+    <span id="spend">${{ '%.2f' | format(usd) }} of ${{ '%.2f' | format(cap) }} for this conversation.</span>
+  </p>
+</div>
+{% endblock %}

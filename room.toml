@@ -1,0 +1,136 @@
+# The writers room. Code decides what runs, what it may spend and what reaches the blog;
+# the models only do the research and the writing.
+
+[blog]
+path = "../aiven-bot-blog"           # the render-engine site the drafts land in
+posts_dir = "content/posts"
+authors_file = "content/authors.json"
+pocs_dir = "content/pocs"            # under content/ so the blog's ruff config skips POC code
+build = "mise run build"             # must pass with the draft in place before anything is committed
+branch_prefix = "room/"              # each draft gets its own branch; a human merges
+
+# Models go through Aiven AI Gateway (LiteLLM). pi reads the key from the environment at request
+# time ($AIVEN_AI_GATEWAY_KEY, supplied by fnox); no built-in shell tool is enabled for any role,
+# so an agent cannot read it.
+[gateway]
+base_url = "https://ai.aiven.io/v1"
+api = "openai-completions"
+key_env = "AIVEN_AI_GATEWAY_KEY"
+
+# Cheapest model that does the job: Haiku for lookups, Sonnet for rule-following, Opus for judgment.
+[models]
+scout = "claude-haiku-5-5"       # reads signals, proposes pitches
+editor = "claude-sonnet-5-5"     # ranks pitches, assigns an author, decides whether a POC is worth it
+researcher = "claude-sonnet-5-5" # reads sources and writes the brief every claim must trace back to
+poc = "claude-sonnet-5-5"        # builds and runs a small proof of concept on a Nevia computer
+writer = "claude-sonnet-5-5"     # writes the post in the assigned author's voice
+reviewer = "claude-opus-5-5"     # fact-checks the draft against the brief; judgment, so the strongest
+chat = "claude-sonnet-5-5"       # talking with a persona in the web UI
+
+[thinking]
+reviewer = "high"
+editor = "medium"
+
+# USD per million tokens, keyed by model id. An unpriced model is metered in tokens at $0, so only
+# the token cap below can stop it. Fill these in from the gateway's price list.
+[prices."claude-haiku-5-5"]
+input = 0.0
+output = 0.0
+[prices."claude-sonnet-5-5"]
+input = 0.0
+output = 0.0
+[prices."claude-opus-5-5"]
+input = 0.0
+output = 0.0
+
+# Durable writes: each `room write` is a Temporal workflow, so a crash resumes at the step that was
+# running and a POC computer is deleted even if the process that made it died. The server is
+# `mise run temporal` (state in .room/temporal.db). ROOM_TEMPORAL=off writes in-process instead.
+# Ports are 7243/8243 so this can run next to the factory's Temporal on 7233.
+[temporal]
+enabled = true
+address = "127.0.0.1:7243"
+namespace = "default"
+task_queue = "writers-room"
+retry_seconds = 30   # first wait before a failed step is retried (it backs off from there)
+
+[budget]
+pitch_usd = 4.0            # per pitch, across every role; checked before each role and while it runs
+pitch_tokens = 3_000_000   # backstop for unpriced models
+scout_usd = 1.0
+chat_usd = 1.0             # per conversation in the web UI; separate from any pitch's write budget
+
+[limits]
+role_wall_clock_min = 20
+role_max_turns = 60
+max_write_rounds = 3       # extra writer attempts after failed gates
+max_review_rounds = 2      # extra write+review cycles after request_changes
+fetch_max_bytes = 400_000  # per fetched page, before it is reduced to text
+fetch_max_chars = 30_000   # text handed back to the model per page
+
+# Per-role overrides. A role resends everything it has read on every turn, so a scout that reads
+# whole pages gets slow and expensive fast. It is choosing topics, not researching them.
+[limits.fetch_chars]
+scout = 5_000
+chat = 12_000
+
+# Lookups (searches and fetches) per run. Near the end, results say how many are left; past it,
+# lookups are refused and the role is told to submit. Submitting and reading notes never count.
+[limits.tool_calls]
+scout = 20
+editor = 10
+researcher = 45
+poc = 80
+writer = 12
+reviewer = 25
+chat = 12
+
+[limits.max_turns]
+scout = 15
+editor = 10
+chat = 10
+
+[limits.wall_clock_min]
+scout = 8
+editor = 5
+chat = 4
+
+# Where the scout looks. Code fetches these; the scout only reads what came back.
+[scout]
+lookback_days = 7
+per_source = 15
+user_agent = "ai-writers-room/0.1 (+https://aivens-bot-blog.com)"
+hn_queries = ["postgres", "kafka", "pgvector", "clickhouse", "opensearch", "valkey", "mcp server", "llm gateway", "ai agents database"]
+github_topics = ["mcp", "pgvector", "ai-agents", "rag", "kafka"]
+max_pitches = 6
+
+# Feeds the scout reads every run, listed in the order it sees them. The changelog comes first:
+# what Aiven just shipped is often the best angle, paired with what the community is discussing.
+# `days` overrides lookback_days for a quieter feed.
+[[scout.feeds]]
+name = "aiven-changelog"
+url = "https://aiven.io/changelog/feed.xml"
+days = 14
+
+[[scout.feeds]]
+name = "planet-postgresql"
+url = "https://planet.postgresql.org/rss20.xml"
+
+[[scout.feeds]]
+name = "planet-kafka"
+kind = "planet-kafka"   # Aiven's Planet Kafka has no feed; its page reads aiven.io/api/planet-kafka
+days = 21               # a few posts a week
+
+[[scout.feeds]]
+name = "planet-valkey"
+url = "https://planet.valkey.io/atom.xml"
+days = 21
+
+# Proofs of concept run on Nevia computers. The agent drives them one short `nevia exec` at a time
+# from this machine, so the model key never enters the computer.
+[poc]
+enabled = true
+image = ""                 # empty: Nevia's default image
+exec_timeout_s = 600
+keep_computer = false      # delete the computer when the POC role ends, pass or fail
+# Agents never create Aiven services: the POC role uses local stand-ins (see README, "Not built").

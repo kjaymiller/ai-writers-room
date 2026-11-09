@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% block title %}{{ p.title }} · Writers Room{% endblock %}
+{% block main %}
+{% set a = authors.get(p.author) %}
+{% set first = a.name.split()[0] if a else 'The room' %}
+<article class="pitch" data-pitch="{{ p.id }}" data-busy="{{ 1 if p.busy else 0 }}" data-status="{{ p.status }}">
+  <a class="back muted" href="/">← All pitches</a>
+  <header class="pitch-head">
+    {{ avatar(p.author, authors, 'large') }}
+    <div>
+      <h1>{{ p.title }}</h1>
+      <p class="byline">{% if a %}{{ a.name }}, {{ a.role }}{% else %}No writer yet{% endif %} · pitch #{{ p.id }} · {{ p.created | ago }}{% if p.source == 'scout' %} · found by the scout{% elif p.source == 'chat' %} · came out of a chat{% else %} · your idea{% endif %}</p>
+    </div>
+  </header>
+
+  <div class="status-card status-{{ p.status }}">
+    <p class="status-line">
+      {% if p.busy %}<span class="pulse"></span>{% endif %}
+      {% if p.status == 'proposed' %}This is an idea waiting for your OK.
+      {% elif p.status == 'approved' %}Approved. {{ first }} is ready to start when you are.
+      {% elif p.status in ('researching','prototyping','writing','reviewing') %}{{ first }} {{ p.doing }}{% if p.stalled %}, but nothing is running right now. The write was interrupted; resume it and it picks up from the same step{% endif %}.
+      {% elif p.status == 'drafted' %}Drafted and committed to <code>{{ p.branch }}</code> in the blog repo. Nothing was pushed: read it, then merge or delete the branch.
+      {% elif p.status == 'escalated' %}{{ first }} stopped and needs a decision from you.
+      {% elif p.status == 'failed' %}The write stopped on an error.
+      {% elif p.status == 'rejected' %}You passed on this one.{% endif %}
+    </p>
+    {% if notes.escalation and p.status == 'escalated' and p.reason.startswith(notes.escalation.role) %}
+      <div class="reason-box"><p><strong>The {{ notes.escalation.role }} says:</strong> {{ notes.escalation.reason }}</p>
+        <p class="small muted">What they suggest you do</p>
+        <ol class="next-steps">{% for s in notes.escalation.next_steps %}<li>{{ s }}</li>{% endfor %}</ol></div>
+    {% elif p.reason and p.status in ('escalated','failed','rejected','proposed') %}<div class="reason-box">{{ p.reason | md | safe }}</div>{% endif %}
+    <div class="row actions">
+      {% if p.status in ('proposed','escalated','failed','rejected') and not p.busy %}
+        <form method="post" action="/pitches/{{ p.id }}/approve"><button class="button" {% if not key_ok and not notes.assignment %}disabled{% endif %}>{% if p.status == 'proposed' %}Approve{% else %}Approve again{% endif %}</button></form>
+      {% endif %}
+      {% if p.status in ('approved','escalated','failed') or p.stalled %}{% if not p.busy and notes.assignment %}
+        <form method="post" action="/pitches/{{ p.id }}/write"><button class="button {% if p.status != 'approved' and not p.stalled %}ghost{% endif %}" {% if not key_ok %}disabled{% endif %}>{% if p.stalled %}Resume the write{% elif p.status == 'approved' %}Start writing{% else %}Try the write again{% endif %}</button></form>
+      {% endif %}{% endif %}
+      {% if a %}
+        <form method="post" action="/chats"><input type="hidden" name="author" value="{{ p.author }}"><input type="hidden" name="pitch_id" value="{{ p.id }}"><button class="button ghost">Talk to {{ first }} about this</button></form>
+      {% endif %}
+      {% if p.status in ('proposed','escalated','failed','approved') and not p.busy %}
+        <form method="post" action="/pitches/{{ p.id }}/reject" class="reject"><button class="link">Pass on it</button></form>
+      {% endif %}
+    </div>
+    <p class="muted small spend">${{ '%.2f' | format(p.usd) }} of the ${{ '%.2f' | format(budget) }} budget{% if p.tokens %} · {{ '{:,}'.format(p.tokens) }} tokens{% endif %}</p>
+  </div>
+
+  <section class="log-section" {% if not p.busy and not runs %}hidden{% endif %}>
+    <details {% if p.busy %}open{% endif %}><summary>What the room is doing</summary>
+      <pre id="log" data-src="/pitches/{{ p.id }}/log" data-follow="{{ 1 if p.busy else 0 }}"></pre>
+    </details>
+  </section>
+
+  <div class="pitch-grid">
+    <div class="pitch-main">
+      {% if draft_body %}
+      <section class="draft">
+        <h2 class="section-title">The draft</h2>
+        <div class="paper">
+          <h1 class="draft-title">{{ draft_meta.title }}</h1>
+          {% if draft_meta.summary %}<p class="draft-summary">{{ draft_meta.summary }}</p>{% endif %}
+          <div class="prose">{{ draft_body | md | safe }}</div>
+          {% if draft_meta.faq %}<h2>FAQ</h2><dl class="faq">{% for f in draft_meta.faq %}<dt>{{ f.q }}</dt><dd>{{ f.a }}</dd>{% endfor %}</dl>{% endif %}
+        </div>
+        {% if notes.gates and notes.gates.warnings %}<p class="muted small">Checks passed, with notes: {{ notes.gates.warnings | join('; ') }}</p>{% endif %}
+      </section>
+      {% endif %}
+
+      {% if notes.review %}
+      <section>
+        <h2 class="section-title">The fact-checker's {% if notes.review.verdict == 'approve' %}sign-off{% else %}notes{% endif %}</h2>
+        <div class="note {% if notes.review.verdict == 'approve' %}good{% else %}warn{% endif %}">
+          <p><strong>{% if notes.review.verdict == 'approve' %}Approved for the blog.{% else %}Sent back for changes.{% endif %}</strong></p>
+          {% if notes.review.reasons %}<ul>{% for r in notes.review.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+          {% if notes.review.unsupported_claims %}<p class="small muted">Unsupported claims:</p><ul class="small">{% for r in notes.review.unsupported_claims %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if notes.poc %}
+      <section>
+        <h2 class="section-title">The demo</h2>
+        <div class="note {% if notes.poc.works %}good{% else %}warn{% endif %}">
+          <p><strong>{% if notes.poc.works %}It works, and it was run to prove it.{% else %}It didn't come together.{% endif %}</strong> {{ notes.poc.summary }}</p>
+          {% if notes.poc.how_to_run %}<p class="small muted">To run it</p><pre>{{ notes.poc.how_to_run | join('\n') }}</pre>{% endif %}
+          {% for e in notes.poc.evidence %}<details class="small"><summary><code>{{ e.command }}</code></summary><pre>{{ e.output }}</pre></details>{% endfor %}
+          {% if notes.poc.limitations %}<p class="small muted">Limitations</p><ul class="small">{% for l in notes.poc.limitations %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if notes.research %}
+      <section>
+        <h2 class="section-title">What the research found</h2>
+        <p>{{ notes.research.summary }}</p>
+        <ol class="claims">
+          {% for c in notes.research.claims %}
+          <li><span>{{ c.claim }}</span><blockquote>“{{ c.quote }}”</blockquote><a class="source" href="{{ c.source }}" target="_blank" rel="noopener noreferrer">{{ c.source | replace('https://', '') | truncate(70) }}</a></li>
+          {% endfor %}
+        </ol>
+        {% if notes.research.open_questions %}
+          <h3>Couldn't confirm</h3>
+          <ul>{% for q in notes.research.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if notes.research.competitors %}
+          <h3>Others in the space</h3>
+          <ul>{% for q in notes.research.competitors %}<li>{{ q }}</li>{% endfor %}</ul>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {% if not (draft_body or notes.research or notes.review) %}
+      <section class="empty big">
+        {% if p.busy %}The room is on it. This page fills in as each step finishes.
+        {% elif p.status == 'proposed' %}Approve it and the editor will plan it; then start the write.
+        {% else %}Nothing written yet.{% endif %}
+      </section>
+      {% endif %}
+    </div>
+
+    <aside class="pitch-side">
+      <section class="side-card">
+        <h3>The ask</h3>
+        {% if p.prompt %}<blockquote class="ask">{{ p.prompt }}</blockquote>{% else %}<div class="small">{{ p.angle | md | safe }}</div>{% endif %}
+        {% if p.evidence %}<p class="small muted">Where it came from</p><ul class="small links">{% for u in p.evidence %}<li><a href="{{ u }}" target="_blank" rel="noopener noreferrer">{{ u | replace('https://', '') | truncate(48) }}</a></li>{% endfor %}</ul>{% endif %}
+      </section>
+
+      <section class="side-card">
+        <h3>Your direction</h3>
+        {% if direction %}<div class="small direction">{{ direction | md | safe }}</div>
+        {% else %}<p class="small muted">Talk to {{ first }} and pin anything you want followed. Pinned messages go to the researcher, writer and fact-checker on the next write.</p>{% endif %}
+      </section>
+
+      {% if notes.assignment %}
+      <section class="side-card">
+        <h3>The editor's plan</h3>
+        <p class="small">{{ notes.assignment.reasons | join(' ') }}</p>
+        {% if notes.assignment.outline %}<ol class="small outline">{% for o in notes.assignment.outline %}<li>{{ o }}</li>{% endfor %}</ol>{% endif %}
+        {% if notes.assignment.poc_goal and p.needs_poc %}<p class="small"><strong>Demo goal:</strong> {{ notes.assignment.poc_goal }}</p>{% endif %}
+        <p class="small muted">Value to readers: {{ notes.assignment.value }}/10</p>
+      </section>
+      {% endif %}
+
+      {% if chats %}
+      <section class="side-card">
+        <h3>Conversations</h3>
+        <ul class="small links">{% for c in chats %}<li><a href="/chats/{{ c.id }}">With {{ authors[c.author].name.split()[0] }}</a> <span class="muted">· {{ c.n }} messages · {{ c.created | ago }}</span></li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+
+      {% if runs %}
+      <section class="side-card">
+        <h3>Who's worked on it</h3>
+        <ul class="small runs">{% for r in runs %}<li><span>{{ r.role }}</span><span class="muted">{{ r.outcome or 'running' }}</span><span class="muted">${{ '%.2f' | format(r.usd) }}</span></li>{% endfor %}</ul>
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+</article>
+{% endblock %}

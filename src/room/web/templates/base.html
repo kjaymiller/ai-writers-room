@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Writers Room{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>✎</text></svg>">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">Writers Room <span>for the Aiven Bot Blog</span></a>
+    <nav>
+      <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Pitches</a>
+      <a href="/writers" {% if request.url.path.startswith('/writers') or request.url.path.startswith('/chats') %}aria-current="page"{% endif %}>Writers</a>
+      <a class="button small" href="/pitches/new">New pitch</a>
+    </nav>
+  </header>
+  {% if not key_ok %}
+  <div class="banner warn">The model key ({{ key_env }}) isn't set, so the writers can't work. Start this page with <code>mise run web</code>, which loads it from fnox.</div>
+  {% endif %}
+  <main>{% block main %}{% endblock %}</main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

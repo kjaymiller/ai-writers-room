@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Writers · Writers Room{% endblock %}
+{% block main %}
+<section class="intro">
+  <div>
+    <h1>The writers</h1>
+    <p class="muted">Each one is an AI persona with a beat and a voice. Talk an idea through with one, ask why a draft went the way it did, or have them look something up. When you agree on a post, they'll put it on the board for you to approve.</p>
+  </div>
+</section>
+<div class="writers">
+  {% for slug, a in authors.items() %}
+  <article class="writer-card">
+    <header><span class="avatar large" style="--h: {{ slug | hue }}">{{ a.name | initials }}</span>
+      <div><h2>{{ a.name }}</h2><p class="muted small">{{ a.role }}</p></div></header>
+    <p>{{ a.bio }}</p>
+    <dl class="small">
+      <dt>Writes about</dt><dd>{{ a.beat }}</dd>
+      <dt>Sounds like</dt><dd>{{ a.voice }}</dd>
+      <dt>Always</dt><dd>{{ a.signature }}</dd>
+    </dl>
+    <footer>
+      <form method="post" action="/chats"><input type="hidden" name="author" value="{{ slug }}"><button class="button">Talk to {{ a.name.split()[0] }}</button></form>
+      <a class="button ghost" href="/pitches/new?author={{ slug }}">Pitch them a post</a>
+      <span class="muted small">{{ stats[slug].pitches }} pitches · {{ stats[slug].drafted }} drafted</span>
+    </footer>
+  </article>
+  {% endfor %}
+</div>
+{% if chats %}
+<section class="recent">
+  <h2 class="section-title">Recent conversations</h2>
+  <ul class="chat-list">
+    {% for c in chats %}
+    <li><a href="/chats/{{ c.id }}"><span class="avatar small" style="--h: {{ c.author | hue }}">{{ authors[c.author].name | initials }}</span>
+      <span><strong>{{ authors[c.author].name }}</strong>{% if c.title %} <span class="muted">on {{ c.title | truncate(60) }}</span>{% endif %}<br><span class="muted small">{{ (c.last or 'No messages yet') | striptags | truncate(110) }}</span></span>
+      <span class="muted small">{{ (c.at or c.created) | ago }}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

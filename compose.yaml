@@ -1,0 +1,69 @@
+# The whole writers room:  mise run up   (= fnox exec -- docker compose up -d --build)
+# Secrets come from the calling environment, never from a file here.
+name: writers-room
+
+x-room: &room
+  image: writers-room:latest
+  build: .
+  restart: unless-stopped
+  volumes:
+    - room-state:/data                     # room.db, job notes and logs, the pi agent dir
+    - blog-venv:/opt/blog-venv             # the blog's Linux virtualenv, for building drafts
+    - ./room.toml:/app/room.toml:ro
+    - ./notes:/app/notes:ro
+    - ${ROOM_BLOG_DIR:-../aiven-bot-blog}:/blog   # drafts are committed to branches here
+  environment:
+    AIVEN_AI_GATEWAY_KEY:                  # from fnox; never written down
+    ROOM_TEMPORAL_ADDRESS: temporal:7233
+    NEVIA_KEY_FILE: /run/secrets/nevia_key
+  secrets: [nevia_key]
+  depends_on:
+    temporal:
+      condition: service_healthy
+
+services:
+  # The pitch board, the pitch pages and the chats: http://127.0.0.1:8250
+  web:
+    <<: *room
+    container_name: writers-room-web
+    command: ["room", "web"]
+    ports:
+      - "127.0.0.1:8250:8250"              # this machine only: a POST here spends model money
+
+  # Picks up any write whose `room write` (or web request) was interrupted, from the same step.
+  worker:
+    <<: *room
+    container_name: writers-room-worker
+    command: ["room", "worker"]
+
+  # Durable writes. The dev server keeps its state in one SQLite file on a volume. The UI is on
+  # http://127.0.0.1:8243; 7243 is published for a `room` run on the host. These ports leave the
+  # factory's Temporal (7233) alone.
+  temporal:
+    image: temporalio/temporal:1.10.0
+    container_name: writers-room-temporal
+    restart: unless-stopped
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--ui-ip", "0.0.0.0",
+              "--db-filename", "/home/temporal/temporal.db"]
+    volumes:
+      # The image runs as uid 1000 (`temporal`); a volume over its home directory is writable.
+      - temporal-data:/home/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 10s
+      start_period: 30s
+      start_interval: 2s
+    ports:
+      - "127.0.0.1:7243:7233"
+      - "127.0.0.1:8243:8233"
+
+secrets:
+  # The key file `nevia access add --private-key` wrote. `mise run up` finds yours; without one the
+  # room still runs, and only proof-of-concept builds fail (with a message saying so).
+  nevia_key:
+    file: ${NEVIA_KEY_PATH:-./deploy/no-nevia-key}
+
+volumes:
+  room-state:
+  blog-venv:
+  temporal-data:

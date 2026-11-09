@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}New pitch · Writers Room{% endblock %}
+{% block main %}
+<section class="narrow">
+  <h1>Pitch a post</h1>
+  <p class="muted">Say what you want written, the way you'd brief a colleague. The editor plans it and picks a writer unless you choose one. Your pitch is approved as soon as it's planned.</p>
+  <form method="post" action="/pitches" class="stack">
+    <label>What should the post be about?
+      <textarea name="prompt" rows="6" required autofocus placeholder="e.g. A practical guide to semantic caching for Claude Code sessions with Aiven for Valkey: what to cache, how to measure the hit rate, and when it isn't worth it."></textarea>
+    </label>
+    <fieldset>
+      <legend>Who should write it?</legend>
+      <div class="writer-picks">
+        <label class="pick"><input type="radio" name="author" value="" {% if not chosen %}checked{% endif %}><span class="pick-body"><strong>Let the editor choose</strong><span class="muted small">Matched to the writer's beat</span></span></label>
+        {% for slug, a in authors.items() %}
+        <label class="pick"><input type="radio" name="author" value="{{ slug }}" {% if chosen == slug %}checked{% endif %}>
+          <span class="pick-body"><span class="pick-head"><span class="avatar small" style="--h: {{ slug | hue }}">{{ a.name | initials }}</span><strong>{{ a.name }}</strong></span><span class="muted small">{{ a.beat }}</span></span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="poc" value="true"> Build a working demo for it on a Nevia computer <span class="muted small">(slower, and it costs a computer for a while)</span></label>
+    <label class="check"><input type="checkbox" name="write_now" value="true" checked> Start writing as soon as it's planned</label>
+    <div class="row"><button class="button" {% if not key_ok %}disabled{% endif %}>Send to the room</button><a href="/" class="muted">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

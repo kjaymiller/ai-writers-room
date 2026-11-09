@@ -1,0 +1,26 @@
+{% macro avatar(slug, authors, size='') -%}
+{%- set a = authors.get(slug) -%}
+<span class="avatar {{ size }}" style="--h: {{ slug | hue }}" title="{{ a.name if a else 'Not assigned yet' }}">{{ (a.name | initials) if a else '?' }}</span>
+{%- endmacro %}
+
+{% macro card(p, authors) -%}
+<a class="card" href="/pitches/{{ p.id }}">
+  <div class="card-top">
+    {{ avatar(p.author, authors) }}
+    <span class="who">{{ authors[p.author].name if p.author in authors else 'Unassigned' }}</span>
+    {% if p.needs_poc %}<span class="tag">demo</span>{% endif %}
+    {% if p.source == 'chat' %}<span class="tag soft">from a chat</span>{% elif p.source == 'prompt' %}<span class="tag soft">yours</span>{% endif %}
+  </div>
+  <h3>{{ p.title }}</h3>
+  {% if p.status in ('escalated', 'failed') and p.reason %}
+    <p class="reason">{{ p.reason.split('\n')[0] | replace(' escalated:', ' stopped:') | truncate(160) }}</p>
+  {% elif p.doing %}
+    <p class="doing">{% if p.busy %}<span class="pulse"></span>{% endif %}{{ authors[p.author].name.split()[0] if p.author in authors else 'The room' }} {{ p.doing }}{% if p.stalled %} (paused){% endif %}</p>
+  {% elif p.status == 'drafted' and p.branch %}
+    <p class="muted mono">{{ p.branch }}</p>
+  {% elif p.angle %}
+    <p class="muted">{{ p.angle.split('\n')[0] | truncate(140) }}</p>
+  {% endif %}
+  <div class="card-foot muted">#{{ p.id }} · {{ p.created | ago }}{% if p.usd %} · ${{ '%.2f' | format(p.usd) }}{% endif %}</div>
+</a>
+{%- endmacro %}
